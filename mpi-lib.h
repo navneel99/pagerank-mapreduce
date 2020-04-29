@@ -2,6 +2,7 @@
 #define MPILIB_H
 
 #include "common.h"
+#include "mpi.h"
 
 class MapReduce{
 
