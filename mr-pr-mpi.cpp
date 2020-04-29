@@ -2,8 +2,6 @@
 
 
 
-// using namespace std;
-
 float* link_mat_creator(string fname, long long int n){
     // cout<<"n: "<<n<<endl;
     ifstream myfile(fname);
@@ -132,28 +130,42 @@ void write_to_file(string fname,tuple<float*,float*> tup,long long int n){
     myfile.close();
 }
 
-int main(int argc, char const *argv[])
+int main(int argc, char *argv[])
 {
+
+    //Parses Argument and gets back 'n', the number of nodes 
     string fname = argv[1];
     string outflag = argv[2]; //Essentially just "-o"
     string outfilename = argv[3];
     string delim1 = "-",delim2=".";
     long long int n = stoi(fname.substr(fname.find(delim1)+1,fname.find(delim2))); 
+
+    //MPI vars
+    int id;
+    int proc;
+    int ierr = MPI_Init(&argc,&argv);
+    ierr = MPI_Comm_size(MPI_COMM_WORLD,&proc);
+    ierr = MPI_Comm_rank(MPI_COMM_WORLD,&id);
+
+    //Instantiates various arrays for subsequent use.
     float* A;
-    float* p;
     bool *d;
+    float* p;
     p = (float *)malloc(n*sizeof(float));
+
+    //Initializes the variables.
     A = link_mat_creator(fname,n);
     d = get_dangling_nodes(A,n);
-    // cout<< A[19979]<<endl;
     set_initial_prob(p,n);
+
     // cout<<"in main() all val of p: "<<p[1]<<endl;
 
+    //Acc. to google
     float l_f=0.85;
     float l_r= 1-l_f;
 
-    tuple<float*,float*> to_mapper = map_pairs(A,p,n);
-    // float prev = sum_of_vec(p,n);
+    //Variables to use in the program.
+    tuple<float*,float*> to_mapper;// = map_pairs(A,p,n);    
     float prev = 0;
     float curr = prev;
     long int itr = 0;
@@ -161,6 +173,7 @@ int main(int argc, char const *argv[])
     tuple<float*,float*> tup;
     MapReduce mr;
 
+    //The random tE(Probability to move to any page)
     vector<PAIR> tE;
     for(int i=0;i<n;i++){
        tE.push_back(make_tuple(i, (l_r/n) ));
