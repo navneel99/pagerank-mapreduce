@@ -130,6 +130,30 @@ void write_to_file(string fname,tuple<float*,float*> tup,long long int n){
     myfile.close();
 }
 
+float* unpack(vector<PAIR> v){
+    int l = v.size();
+    float *ans = (float*)malloc(l*2*sizeof(float));
+    // ans[0] = 2*l+1;
+    for(int i=0;i<l;i++){
+        k = get<0>(v[i]);
+        val = get<1>(v[i]);
+        ans[i*2] = k;
+        ans[i*2]=val;
+    }
+    return ans;
+}
+
+vector<PAIR> pack(float* f,long long int n){
+    // int l = (int)f[0];
+    vector<PAIR> ans;
+    for(int i=0;i<(l)/2;i++){
+        float k = f[i*2];
+        float v = f[i*2];
+        ans.push_back(make_tuple(k,v));
+    }
+    return ans;
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -178,49 +202,87 @@ int main(int argc, char *argv[])
     for(int i=0;i<n;i++){
        tE.push_back(make_tuple(i, (l_r/n) ));
     }
-
+    int *scounts,*displs;
+    bool toDo=true;
+    bool while_cond = (id==0 and (itr==0 or abs(curr-prev)>=10e-9)) or (id !=0 and toDo==true);
     //Main loop
-    while (itr == 0 or abs(curr-prev)>=10e-9){
-        to_mapper = map_pairs(A,p,n);
+        // while (itr == 0 or abs(curr-prev)>=10e-9){
+        while(while_cond){
+            to_mapper = map_pairs(A,p,n);
+            //Sends message to other process to do this iteration
+            // toDo = true;
+            MPI_Bcast(toDo,1,MPI_BOOL,0,MPI_COMM_WORLD);
+            if (id!=0 and toDo==false){
+                break;
+            }
 
-        //Handling dangling nodes
-        vector<PAIR> d_dot_p = mr.secondary_map_task(d,to_mapper,n);
-        // cout<<"Secondary map_task completed."<<endl;
-        vector<PAIR> dot_prod = mr.reduce_task(d_dot_p,1); //The length will be 1 with all summed p_js
-        // cout<<"Added all the p_js."<<endl;
-        vector<PAIR> Dp = dangling_mul(dot_prod,n);
-        // cout<<"Dp calculated."<<endl;
+            if (id==0){
+                //Handling dangling nodes
+                vector<PAIR> d_dot_p = mr.secondary_map_task(d,to_mapper,n);
+                // cout<<"Secondary map_task completed."<<endl;
+                vector<PAIR> dot_prod = mr.reduce_task(d_dot_p,1); //The length will be 1 with all summed p_js
+                // cout<<"Added all the p_js."<<endl;
+                vector<PAIR> Dp = dangling_mul(dot_prod,n);
+                // cout<<"Dp calculated."<<endl;
 
-        v = mr.primary_map_task(to_mapper,n); 
-        // cout<<"Primary map task completed. Size of v: "<<v.size()<<endl;
-        //Can reserve size for performance though. 
-        v.insert(v.end(),Dp.begin(),Dp.end());
-        // cout<<"Extended this vector with the dangling nodes. New size of v: "<<v.size()<<endl;
+                v = mr.primary_map_task(to_mapper,n); 
+                // cout<<"Primary map task completed. Size of v: "<<v.size()<<endl;
+                //Can reserve size for performance though. 
+                v.insert(v.end(),Dp.begin(),Dp.end());
+                // cout<<"Extended this vector with the dangling nodes. New size of v: "<<v.size()<<endl;
+            
+                long long int v_sz = v.size();
+                float *uv = unpack(v);
+                
+                //How to get the length from the root process
+                scounts = (int*)malloc(sizeof(int)*p);
+                displs =  (int*)malloc(sizeof(int)*p);
+                for (int i=0;i<p;i++){
+                    if (i==p-1){
+                        scounts[i]=(v_sz/p)+(v_sz%p);
+                    }else{
+                        scounts[i]=(v_sz/p);
+                    }
+                    displs[i] = i*(v_sz/p);
+                }
+            }
+            int rbufcount,rbufdata;
+            float* v_dash;
+            MPI_Scatter(scounts,1,MPI_INT,rbufcount,1,MPI_INT,0,MPI_COMM_WORLD); //Sending the count to all process;
+            MPI_Barrier(MPI_COMM_WORLD);
+            MPI_Scatterv(v,scounts,displs,MPI_FLOAT,v_dash,MPI_FLOAT,0,MPI_COMM_WORLD);
+            vector<PAIR> v_temp = pack(v_dash,rbufcount);
+            v2 = mr.reduce_task(v_temp,n);
 
-        v2 = mr.reduce_task(v,n);
-        // cout<<"Add the tuples now added in the reduce task. Size of v2: "<<v2.size()<<endl;
-        v2 = vec_multiply(v2,l_f);
-        // cout<<"Tuples now multiplied with 0.85 Size of v2: "<<v2.size()<<endl;
-        v2 = vec_add(v2,tE);
-        // cout<<"Tuples added with the tE term. Size of v2: "<<v2.size()<<endl;
-        tup = change_format(v2,n);
-        float* new_p = get<1>(tup);
-        if (itr!=0){
-            prev = curr;
+            // v2 = mr.reduce_task(v,n);
+
+            // cout<<"Add the tuples now added in the reduce task. Size of v2: "<<v2.size()<<endl;
+            v2 = vec_multiply(v2,l_f);
+            // cout<<"Tuples now multiplied with 0.85 Size of v2: "<<v2.size()<<endl;
+            v2 = vec_add(v2,tE);
+            // cout<<"Tuples added with the tE term. Size of v2: "<<v2.size()<<endl;
+            tup = change_format(v2,n);
+            float* new_p = get<1>(tup);
+            if (itr!=0){
+                prev = curr;
+            }
+            curr = sum_of_vec(new_p,n);
+            // cout<<"Current sum of all p_js is: "<<curr<<endl;
+            p = new_p;
+            itr++;
+
+            while_cond = (id==0 and (itr==0 or abs(curr-prev)>=10e-9)) or (id !=0 and toDo==true);
+        } 
+        if (id == 0){
+            toDo=false;
+            MPI_Bcast(toDo,1,MPI_BOOL,0,MPI_COMM_WORLD);
         }
-        curr = sum_of_vec(new_p,n);
-        // cout<<"Current sum of all p_js is: "<<curr<<endl;
-        p = new_p;
-        itr++;
-    } 
+        
+        
+        write_to_file(outfilename,tup,n);
 
-    write_to_file(outfilename,tup,n);
+        cout<<"Itr: "<<itr<<endl;
 
-    // for ( int i=0;i<n;i++){
-    //     cout<<get<0>(tup)[i]<<" "<<get<1>(tup)[i]<<endl;
-    // }
-    cout<<"Itr: "<<itr<<endl;
-
-   
+    ierr = MPI_Finalize();
     return 0;
 }
