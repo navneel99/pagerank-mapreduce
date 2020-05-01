@@ -138,7 +138,7 @@ void vec_add(float*v1,float*v2,long long int n){
 
 
 // void write_to_file(string fname,tuple<float*,float*> tup,long long int n){
-void write_to_file(string fname,float* tup,long long int n){
+void write_to_file(string fname,float* tup,long long int n,int proc){
 
     // float* keys = get<0>(tup);
     // float* vals = get<1>(tup);
@@ -146,7 +146,7 @@ void write_to_file(string fname,float* tup,long long int n){
     ofstream myfile(fname);
     for(long long int i=0;i<n;i++){
         // myfile<<keys[i]<<" = "<<vals[i]<<"\n";
-        myfile<<tup[i*2]<<" = "<<tup[i*2+1]<<"\n";
+        myfile<<tup[i*2]/proc<<" = "<<tup[i*2+1]<<"\n";
     }
     myfile<<"s = 1.0"<<"\n";
     myfile.close();
@@ -206,6 +206,8 @@ int main(int argc, char *argv[])
     to_mapper = (float*)malloc(4*n*sizeof(float));
     mapper_part = (float*)malloc(4*(n/proc)*sizeof(float));
     v2=(float*)malloc(2*n*sizeof(float));
+    v=(float*)malloc(2*n*sizeof(float));
+
     // tuple<float*,float*> tup;
     
     float* tup;
@@ -246,29 +248,34 @@ int main(int argc, char *argv[])
             dangling_mul(dot_prod,n,temp_mat);
 
         }
-        // MPI_Scatter(to_mapper,4*n/proc,MPI_FLOAT,mapper_part,4*n/proc,MPI_FLOAT,0,MPI_COMM_WORLD);
-        // MPI_Barrier(MPI_COMM_WORLD);
-        // mr.secondary_map_task(d+(id*n/proc),mapper_part,n/proc,temp_mat_part);
+        
         mr.primary_map_task(mapper_part,n/proc,temp_mat_part);
         MPI_Gather(temp_mat_part,(4*n/proc),MPI_FLOAT,temp_mat+2*n,(4*n/proc),MPI_FLOAT,0,MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        MPI_Scatter(temp_mat,6*n/proc,MPI_FLOAT,temp_mat_part,6*n/proc,MPI_FLOAT,0,MPI_COMM_WORLD);
+        mr.reduce_task(temp_mat_part,3*n/proc,n,v2);
+        MPI_Reduce(v2,v,2*n,MPI_FLOAT,MPI_SUM,0,MPI_COMM_WORLD);
         if (id==0){
             // mr.primary_map_task(to_mapper,n,temp_mat+2*n);
-            mr.reduce_task(temp_mat,3*n,n,v2);
-
+            // mr.reduce_task(temp_mat,3*n,n,v2);
+            // print_vector(v,n,2);
+            // break;
             // cout<<"reduced."<<endl;
-            vec_multiply(v2,n,l_f);
+            vec_multiply(v,n,l_f);
 
 
-            vec_add(v2,tE,n);
+            vec_add(v,tE,n);
             if (itr!=0){
                 prev = curr;
             }
-            curr = sum_of_vec(v2,n);
+            curr = sum_of_vec(v,n);
             for(int i=0;i<n;i++){
-                p[i]=v2[2*i+1];
+                p[i]=v[2*i+1];
             }
 
         }
+            // break;
             itr++;
 
         if (id==0){
@@ -283,7 +290,7 @@ int main(int argc, char *argv[])
 
     
     if (id==0){
-        write_to_file(outfilename,v2,n);
+        write_to_file(outfilename,v,n,proc);
     }
     // for ( int i=0;i<n;i++){
     //     cout<<get<0>(tup)[i]<<" "<<get<1>(tup)[i]<<endl;

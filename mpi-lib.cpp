@@ -73,44 +73,16 @@
         // vector<PAIR> MapReduce::reduce_task(vector<PAIR> mapped_pairs,long long int n){
         void MapReduce::reduce_task(float* mapped_pairs,long long int l,long long int n,float*a){
         
-            // float* keys = (float*)malloc(n*sizeof(float));
-            // float* vals = (float*)malloc(n*sizeof(float));
-            // for ( int i=0;i<n;i++){
-                // vals[i]=0;
-                // keys[i]=i;
-            // }
-            //int cur_l =0; //index of the keys
-            // vector<PAIR> ans;
-            // cout<<"Function started.n: "<<n<<endl;
-            // float* a;// = (float*)malloc(6*sizeof(float));
-            // cout<<"Space allocated."<<endl;
-            // a = (float*)malloc(2*n*sizeof(float));
+
             for (int i=0;i<n;i++){
                 a[i*2]=i;
                 a[i*2+1]=0;
             }
-            // long long int l = mapped_pairs.size();
-            // cout<<"Ok before the big l0op"<<endl;
+
             for (int i=0;i<l;i++){
                 // tuple<float,float> c = mapped_pairs[i];
                 int tmp = mapped_pairs[2*i];
                 a[2*tmp+1]+=mapped_pairs[2*i+1];
-                // int key = (int) get<0>(c);
-                // float val = get<1>(c);
-                // vals[key] += val;
-                // bool added = false;
-                // for (int j =0;j<cur_l;j++){
-                //     if (key == keys[j]){
-                //         vals[j]+=get<1>(c);
-                //         added = true;
-                //         break;
-                //     }
-                // }
-                // if (!added){
-                //     keys[cur_l] = key;
-                //     vals[cur_l]= get<1>(c);
-                //     cur_l++;
-                // }
             }
             // for (int i=0;i<n;i++){
                 // ans.push_back(make_tuple(keys[i],vals[i]));
