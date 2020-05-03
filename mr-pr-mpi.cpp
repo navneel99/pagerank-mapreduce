@@ -178,6 +178,7 @@ int main(int argc, char *argv[])
     ierr = MPI_Comm_size(MPI_COMM_WORLD,&proc);
     ierr = MPI_Comm_rank(MPI_COMM_WORLD,&id);
 
+    double wtime;
     
     //Instantiates various arrays for subsequent use.
     float* A;
@@ -222,11 +223,14 @@ int main(int argc, char *argv[])
     float* temp_mat_part = (float*)malloc(6*(n/proc)*sizeof(float));
     float* dot_prod = (float*)malloc(2*sizeof(float));
 
+    if (id==0){
+        wtime = MPI_Wtime();
+    }
     for(int i=0;i<n;i++){ 
         tE[i*2] = i;
         tE[i*2+1] = (l_r/n);
     }
-
+    
     // bool toDo=true;
     // bool while_cond = (id==0 and (itr==0 or abs(curr-prev)>=10e-9)) or (id !=0 and toDo==true);    
     bool while_cond = true;
@@ -257,11 +261,7 @@ int main(int argc, char *argv[])
         mr.reduce_task(temp_mat_part,3*n/proc,n,v2);
         MPI_Reduce(v2,v,2*n,MPI_FLOAT,MPI_SUM,0,MPI_COMM_WORLD);
         if (id==0){
-            // mr.primary_map_task(to_mapper,n,temp_mat+2*n);
-            // mr.reduce_task(temp_mat,3*n,n,v2);
-            // print_vector(v,n,2);
-            // break;
-            // cout<<"reduced."<<endl;
+
             vec_multiply(v,n,l_f);
 
 
@@ -283,24 +283,20 @@ int main(int argc, char *argv[])
         }
         MPI_Barrier(MPI_COMM_WORLD);
         MPI_Bcast(&while_cond,1,MPI_C_BOOL,0,MPI_COMM_WORLD);
-        cout<<"id: "<<id<<" while_cond: "<<while_cond<<endl;
+        // cout<<"id: "<<id<<" while_cond: "<<while_cond<<endl;
         MPI_Barrier(MPI_COMM_WORLD);
 
     } 
 
     
     if (id==0){
+        wtime = MPI_Wtime() - wtime;
+        cout<<"Time taken: "<<wtime<<endl;
+
         write_to_file(outfilename,v,n,proc);
     }
-    // for ( int i=0;i<n;i++){
-    //     cout<<get<0>(tup)[i]<<" "<<get<1>(tup)[i]<<endl;
-    // }
+
     cout<<"Itr: "<<itr<<" proc: "<<id<<endl;
-    // float* test = (float*)malloc(17*sizeof(float));
-    // for(int i=0;i<17;i++){
-    //     test[i]=1;
-    // }
-    // cout<<sizeof(test)<<" "<<sizeof(float)<<endl;
     ierr = MPI_Finalize();
     return 0;
 }
