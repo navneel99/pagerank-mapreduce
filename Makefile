@@ -9,5 +9,8 @@ part_1:
 part_2:
 	mpicxx -std=c++11 -o mr-pr-mpi.o mr-pr-mpi.cpp mpi-lib.cpp
 
+part_3:
+	mpic++ -g -O mr-pr-mpi-base.o ../src/libmrmpi_mpicc.a  -o mr-pr-mpi-base
+
 clean:
 	rm *.o

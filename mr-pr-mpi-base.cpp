@@ -20,7 +20,6 @@ int me, nprocs;
 void Mapper(int itask, KeyValue *kv, void *ptr);
 void update(uint64_t itask, char *key, int keybytes, char *value, int valuebytes, KeyValue *kv, void *ptr);
 void Reducer(char *key, int keybytes, char *multivalue, int nvalues, int *valuebytes, KeyValue *kv, void *ptr);
-int Hash(char *key, int keybytes);
 void Map(int itask, KeyValue *kv, void *ptr);
 void Modify(uint64_t itask, char *key, int keybytes, char *value, int valuebytes, KeyValue *kv, void *ptr);
 void write_to_file(string fname);
@@ -108,10 +107,11 @@ int main(int argc, char** argv){
     }
 
     if(me == 0){
-        cout<<"Time Taken to find the pagerank is: "<<MPI_Wtime() - wtime<<endl;
-        string out_name = argv[2];
+        // cout <<argv[1]<<endl;
+        // cout<<"Time Taken to find the pagerank is: "<<MPI_Wtime() - wtime<<" --> "<<argv[1]<<endl;
+        string out_name = argv[3];
         write_to_file(out_name);
-        output();
+        // output();
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -183,8 +183,8 @@ void write_to_file(string fname){
         myfile<<i<<" = "<<pageranks[i]<<"\n";
         sum += pageranks[i];
     }
-    cout<<sum<<endl;
-    myfile<<"s = 1.0"<<"\n";
+    // cout<<sum<<endl;
+    myfile<<"s = "<<sum<<"\n";
     myfile.close();
 }
 
