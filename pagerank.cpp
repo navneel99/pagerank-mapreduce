@@ -14,7 +14,8 @@ vector<vector<int>> outgoing_links(100000);
 vector<double> pageranks(100000, 0.0f);
 vector<double> pageranks_up(100000, 0.0f);
 int num_webpages;
-double dp;
+double dp, alpha;
+int me, nprocs;
 
 void Mapper(int itask, KeyValue *kv, void *ptr);
 void update(uint64_t itask, char *key, int keybytes, char *value, int valuebytes, KeyValue *kv, void *ptr);
@@ -22,18 +23,20 @@ void Reducer(char *key, int keybytes, char *multivalue, int nvalues, int *valueb
 int Hash(char *key, int keybytes);
 void Map(int itask, KeyValue *kv, void *ptr);
 void Modify(uint64_t itask, char *key, int keybytes, char *value, int valuebytes, KeyValue *kv, void *ptr);
-
+void write_to_file(string fname);
+void output();
 
 int main(int argc, char** argv){
     MPI_Init(&argc,&argv);
     
-    int me,nprocs;
+    me,nprocs;
     MPI_Comm_rank(MPI_COMM_WORLD,&me);
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);    
     
-    double alpha = 0.85;
-    double conv = 0.0001;
+    alpha = 0.85;
+    double conv = 0.000001;
     num_webpages = 0;
+    double wtime = 0;
 
 	ifstream fopen;
 	fopen.open(argv[1]);
@@ -54,6 +57,10 @@ int main(int argc, char** argv){
 	fopen.close();
 	num_webpages++;
 
+    if(me == 0){
+        wtime = MPI_Wtime();
+    }
+
     for(int i=0; i<num_webpages; i++){
 		pageranks[i] = (double)(1.0f/(double)num_webpages);
 	}
@@ -72,7 +79,7 @@ int main(int argc, char** argv){
         nr->broadcast(0);
         MPI_Barrier(MPI_COMM_WORLD);
         nr->map(nr,Modify,NULL);
-        dp = double(dp/num_webpages);
+        dp = double(dp/(double)(num_webpages));
         delete nr;
 
         // 2nd MapReduce Segment
@@ -86,11 +93,7 @@ int main(int argc, char** argv){
         mr->map(mr,update,NULL);
         delete mr;
 
-        for(int i=0; i<num_webpages; i++){
-                pageranks_up[i] = (double)alpha*pageranks_up[i] + alpha*dp + (double)(1-alpha)/num_webpages;
-            }
-
-        // Calculation of Mp done checking conversion
+        // Calculation of Mp done checking if Mp converges or not
         bool converging = true;
         for(int i=0; i<num_webpages; i++){
             if(pageranks[i]-pageranks_up[i]>conv)
@@ -104,15 +107,12 @@ int main(int argc, char** argv){
         tt++;
     }
 
-    // double sumer = 0.0;
-    // for(int i=0; i<num_webpages && me == 0; i++){
-    //     cout << i << " = " << pageranks[i] << endl;
-    //     sumer += pageranks[i];
-    // }
-
-    // if (me == 0) {
-    //     cout << sumer << endl;
-    // }
+    if(me == 0){
+        cout<<"Time Taken to find the pagerank is: "<<MPI_Wtime() - wtime<<endl;
+        string out_name = argv[2];
+        write_to_file(out_name);
+        output();
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
@@ -122,11 +122,7 @@ int main(int argc, char** argv){
 
 
 void Mapper(int itask, KeyValue *kv, void *ptr){
-
-  int world_rank, num_procs;
-  MPI_Comm_size(MPI_COMM_WORLD,&num_procs);
-  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-  int i = ((world_rank*num_webpages)/num_procs);
+  int i = ((me*num_webpages)/nprocs);
 
   while(true){
     double pgi = 0;
@@ -138,7 +134,7 @@ void Mapper(int itask, KeyValue *kv, void *ptr){
 	}
 
       i++;
-      if(i >= (((world_rank+1)*num_webpages)/num_procs)){
+      if(i >= (((me+1)*num_webpages)/nprocs)){
           break;
       }
   }
@@ -148,7 +144,7 @@ void Mapper(int itask, KeyValue *kv, void *ptr){
 void update(uint64_t itask, char *key, int keybytes, char *value, int valuebytes, KeyValue *kv, void *ptr){
   int keyint = *(int *) key;
   double pgrank = *(double *) value;
-  pageranks_up[keyint] = pgrank;
+  pageranks_up[keyint] = (double)alpha*pgrank + alpha*dp + (double)(1-alpha)/num_webpages;
 }
 
 void Reducer(char *key, int keybytes, char *multivalue, int nvalues, int *valuebytes, KeyValue *kv, void *ptr){
@@ -162,17 +158,14 @@ void Reducer(char *key, int keybytes, char *multivalue, int nvalues, int *valueb
 }
 
 void Map(int itask, KeyValue *kv, void *ptr){
-    int world_rank, num_procs;
-    MPI_Comm_size(MPI_COMM_WORLD,&num_procs);
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-    int i = ((world_rank*num_webpages)/num_procs);
+    int i = ((me*num_webpages)/nprocs);
 
   while(true){
     if(outgoing_links[i].size() == 0)
         kv->add((char *) &i,sizeof(int),(char *) &pageranks[i],sizeof(double));
     
     i++;
-    if(i >= (((world_rank+1)*num_webpages)/num_procs)){
+    if(i >= (((me+1)*num_webpages)/nprocs)){
       break;
     }
   }
@@ -181,4 +174,30 @@ void Map(int itask, KeyValue *kv, void *ptr){
 void Modify(uint64_t itask, char *key, int keybytes, char *value, int valuebytes, KeyValue *kv, void *ptr){
   double pgrank = *(double *) value;
   dp += pgrank;
+}
+
+void write_to_file(string fname){
+    ofstream myfile(fname);
+    double sum = 0.0f;
+    for(long long int i=0;i<num_webpages;i++){
+        myfile<<i<<" = "<<pageranks[i]<<"\n";
+        sum += pageranks[i];
+    }
+    cout<<sum<<endl;
+    myfile<<"s = 1.0"<<"\n";
+    myfile.close();
+}
+
+void output(){
+    double sumer = 0.0;
+    int me;
+    MPI_Comm_rank(MPI_COMM_WORLD, &me);
+
+    if (me == 0) {
+        for(int i=0; i<num_webpages && me == 0; i++){
+            cout << i << " = " << pageranks[i] << endl;
+            sumer += pageranks[i];
+        }
+        cout << sumer << endl;
+    }
 }
