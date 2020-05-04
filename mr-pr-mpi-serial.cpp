@@ -151,6 +151,13 @@ vector<int> fileinfo(string fname){
     return {lines,max_num};
 }
 
+void emit_zero_pairs(int max_num,float * temp_mat){
+    for (int i=0;i<max_num;i++){
+        temp_mat[i*2] = i;
+        temp_mat[i*2+1] = 0;
+    }
+}
+
 int main(int argc, char const *argv[])
 {
 
@@ -247,6 +254,8 @@ int main(int argc, char const *argv[])
         // cout<<"Dp calculated."<<endl;
 
         mr.primary_map_task(to_mapper,lines,max_num,temp_mat+2*max_num);
+
+        emit_zero_pairs(max_num,temp_mat + 2*max_num + 2*lines);
 
         // cout<<"Primary map task done."<<endl;
         mr.reduce_task(temp_mat,((2*max_num)+lines),max_num,v2);
