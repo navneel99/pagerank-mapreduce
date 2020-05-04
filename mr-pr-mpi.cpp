@@ -153,8 +153,8 @@ void write_to_file(string fname,float* tup,long long int n,int proc){
     ofstream myfile(fname);
     for(long long int i=0;i<n;i++){
         // myfile<<keys[i]<<" = "<<vals[i]<<"\n";
-        // myfile<<tup[i*2]/proc<<" = "<<tup[i*2+1]<<"\n";
-        myfile<<tup[i*2]<<" = "<<tup[i*2+1]<<"\n";
+        myfile<<tup[i*2]/proc<<" = "<<tup[i*2+1]<<"\n";
+        // myfile<<tup[i*2]<<" = "<<tup[i*2+1]<<"\n";
 
     }
     myfile<<"s = 1.0"<<"\n";
@@ -285,10 +285,11 @@ int main(int argc, char *argv[])
     // float* temp_mat_part = (float*)malloc(6*(n/proc)*sizeof(float));
     float * temp_mat_part;
     if (id == proc-1){
-    temp_mat_part = (float*)malloc (((2*lines)/proc)+(2*(lines%proc))*sizeof(float));
+    // temp_mat_part = (float*)malloc (((2*lines)/proc)+(2*(lines%proc))*sizeof(float));
+    temp_mat_part = (float*)malloc((2*((2*max_num+lines)/proc) + 2*((2*max_num+lines)%proc))*sizeof(float));
     }else{
-    temp_mat_part = (float*)malloc(((2*lines)/proc)*sizeof(float));
-
+    // temp_mat_part = (float*)malloc(((2*lines)/proc)*sizeof(float));
+    temp_mat_part = (float*)malloc(((4*max_num+2*lines)/proc)*sizeof(float));
     }
 
     float* dot_prod = (float*)malloc(2*sizeof(float));
@@ -354,29 +355,47 @@ int main(int argc, char *argv[])
         // MPI_Gather(temp_mat_part,(4*n/proc),MPI_FLOAT,temp_mat+2*n,(4*n/proc),MPI_FLOAT,0,MPI_COMM_WORLD);
         MPI_Gatherv(temp_mat_part,(recv_size)/2,MPI_FLOAT,temp_mat+2*max_num,srecvs,rec_displs,MPI_FLOAT,0,MPI_COMM_WORLD);
         MPI_Barrier(MPI_COMM_WORLD);
+        for (int i=0;i<proc;i++){
+            displs[i] = max(0,(2*i*((2*max_num+lines)/proc)));
+            // rec_displs[i] = 2*(i*(lines/proc));
+            if (i!=proc-1){
+                scounts[i] = ((4*max_num+2*lines)/proc)-1;
+                // srecvs[i] = 2*(lines/proc);
+            }else{
+                scounts[i] = (2*((2*max_num+lines)/proc)+2*((2*max_num+lines)%proc));
+                // srecvs[i] = 2*((lines/proc)+(lines%proc));
+            }
+            // cout<<"displ["<<i<<"]: "<<displs[i]<<" scounts["<<i<<"]: "<<scounts[i]<<endl;
+        }
+
         // cout<<"Here."<<endl;
         // MPI_Scatter(temp_mat,6*n/proc,MPI_FLOAT,temp_mat_part,6*n/proc,MPI_FLOAT,0,MPI_COMM_WORLD);
         // MPI_Scatter(temp_mat,6*n/proc,MPI_FLOAT,temp_mat_part,6*n/proc,MPI_FLOAT,0,MPI_COMM_WORLD);
-        // MPI_Scatterv(temp_mat,(4*max_num+2*lines)/proc)
-        // mr.reduce_task(temp_mat_part,3*n/proc,n,v2);
-        // MPI_Reduce(v2,v,2*n,MPI_FLOAT,MPI_SUM,0,MPI_COMM_WORLD);
+        MPI_Scatterv(temp_mat,scounts,displs,MPI_FLOAT,temp_mat_part,scounts[id],MPI_FLOAT,0,MPI_COMM_WORLD);
+        mr.reduce_task(temp_mat_part,scounts[id]/2,max_num,v2);
+        MPI_Reduce(v2,v,2*max_num,MPI_FLOAT,MPI_SUM,0,MPI_COMM_WORLD);
         if (id==0){
 
-            mr.reduce_task(temp_mat,(2*max_num+lines),max_num,v2);
+            // mr.reduce_task(temp_mat,(2*max_num+lines),max_num,v2);
 
             // vec_multiply(v,n,l_f);
-            vec_multiply(v2,max_num,l_f);
+            // vec_multiply(v2,max_num,l_f);
+            vec_multiply(v,max_num,l_f);
 
 
             // vec_add(v,tE,n);
-            vec_add(v2,tE,max_num);
+            // vec_add(v2,tE,max_num);
+            vec_add(v,tE,max_num);
 
             if (itr!=0){
                 prev = curr;
             }
-            curr = sum_of_vec(v2,max_num);
+            // curr = sum_of_vec(v2,max_num);
+            curr = sum_of_vec(v,max_num);
+
             for(int i=0;i<max_num;i++){
-                p[i]=v2[2*i+1];
+                // p[i]=v2[2*i+1];
+                p[i]=v[2*i+1];
             }
 
         }
@@ -397,7 +416,9 @@ int main(int argc, char *argv[])
         wtime = MPI_Wtime() - wtime;
         cout<<"Time taken: "<<wtime<<endl;
 
-        write_to_file(outfilename,v2,max_num,proc);
+        // write_to_file(outfilename,v2,max_num,proc);
+        write_to_file(outfilename,v,max_num,proc);
+
     }
 
     // MPI_Finalize();
